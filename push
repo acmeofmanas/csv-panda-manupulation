@@ -1,0 +1,56 @@
+import pandas as pd
+from elasticsearch import Elasticsearch
+from datetime import datetime
+
+# Configuration (replace with your values)
+ELASTIC_HOST = "your_elasticsearch_host"
+ELASTIC_PORT = 9200
+ELASTIC_INDEX = "your_elasticsearch_index"
+CSV_FILE = "path/to/your/csv/file.csv"  # Path to your CSV file
+ID_COLUMN = "id" # Name of ID column or None if you don't have one
+
+def push_csv_to_elastic(csv_file, elastic_client, elastic_index, id_column):
+    try:
+        df = pd.read_csv(csv_file)
+
+        # Add timestamp
+        df['ingestion_timestamp'] = datetime.utcnow()  # Use UTC
+
+        # Index data to Elasticsearch
+        for _, row in df.iterrows():
+            doc = row.to_dict()
+
+            if id_column and id_column in doc: # Check if the ID column exists
+                doc_id = doc.pop(id_column) # Use ID from CSV if available and remove it from the doc
+            else:
+                doc_id = None # Let Elasticsearch generate an ID
+
+            try:
+                response = elastic_client.index(index=elastic_index, document=doc, id=doc_id)
+                #print(f"Indexed document with ID: {response['_id']}") # Uncomment for debugging
+            except Exception as e:
+                print(f"Error indexing document: {e}")
+
+        print(f"Successfully indexed data from {csv_file} to {elastic_index}")
+
+    except FileNotFoundError:
+        print(f"Error: CSV file not found at {csv_file}")
+    except pd.errors.EmptyDataError:
+        print(f"Error: CSV file is empty: {csv_file}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+def main():
+    # Initialize Elasticsearch client
+    es = Elasticsearch(hosts=[{'host': ELASTIC_HOST, 'port': ELASTIC_PORT}])
+
+    # Check if the index exists, create it if it doesn't (Optional)
+    if not es.indices.exists(index=ELASTIC_INDEX):
+        es.indices.create(index=ELASTIC_INDEX)
+
+    push_csv_to_elastic(CSV_FILE, es, ELASTIC_INDEX, ID_COLUMN)
+
+
+if __name__ == "__main__":
+    main()
