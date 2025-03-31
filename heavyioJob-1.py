@@ -14,7 +14,7 @@ hdfs_path_parquet = "hdfs:///user/data/synthetic_data.parquet"
 # Generate Large Synthetic Data
 def generate_data(num_rows=10000000, num_partitions=100):
     rdd = spark.sparkContext.parallelize(range(num_rows), num_partitions)
-    df = rdd.map(lambda x: (x, random.randint(1, 1000), random.random() * 100, chr(65 + (x % 26)))) \
+    df = rdd.map(lambda x: (x, random.randint(1, 1000), random.uniform(0, 100), chr(65 + (x % 26)))) \
         .toDF(["id", "category", "value", "group"])
     return df
 
@@ -22,11 +22,11 @@ def generate_data(num_rows=10000000, num_partitions=100):
 data_df = generate_data()
 
 # Write Data to HDFS (CSV & Parquet)
-data_df.write.mode("overwrite").csv(hdfs_path_csv, header=True)
+data_df.write.mode("overwrite").option("header", "true").csv(hdfs_path_csv)
 data_df.write.mode("overwrite").parquet(hdfs_path_parquet)
 
 # Read the Data Back (I/O Intensive Operation)
-csv_df = spark.read.csv(hdfs_path_csv, header=True, inferSchema=True)
+csv_df = spark.read.option("header", "true").csv(hdfs_path_csv, inferSchema=True)
 parquet_df = spark.read.parquet(hdfs_path_parquet)
 
 # Perform Heavy Aggregation
