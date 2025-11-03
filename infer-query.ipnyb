@@ -1,0 +1,67 @@
+# CELL 8: Suggested Insight Queries (auto-generated from inferred FKs)
+from IPython.display import display, Markdown, Code
+import textwrap
+
+def suggest_queries(rel_df, top_n=8):
+    """Generate 8 high-impact queries using the strongest inferred relationships."""
+    queries = []
+    seen_pairs = set()
+    
+    for _, r in rel_df.head(top_n).iterrows():
+        pair = (r.parent_table, r.child_table)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        
+        # 1. Basic JOIN + COUNT
+        q1 = f"""-- How many {r.child_table} per {r.parent_table}?
+SELECT 
+    p."{r.parent_col}", 
+    p.<natural_key>, 
+    COUNT(c.*) AS cnt_{r.child_table}
+FROM {r.parent_table} p
+LEFT JOIN {r.child_table} c 
+  ON c."{r.child_col}" = p."{r.parent_col}"
+GROUP BY p."{r.parent_col}", p.<natural_key>
+ORDER BY cnt_{r.child_table} DESC
+LIMIT 10;"""
+        
+        # 2. Find orphans (child rows with no parent)
+        q2 = f"""-- Orphaned {r.child_table} (no matching {r.parent_table})
+SELECT c.*
+FROM {r.child_table} c
+LEFT JOIN {r.parent_table} p 
+  ON c."{r.child_col}" = p."{r.parent_col}"
+WHERE p."{r.parent_col}" IS NULL
+LIMIT 10;"""
+        
+        # 3. Top parent with most children
+        q3 = f"""-- Top {r.parent_table} by number of {r.child_table}
+SELECT 
+    p."{r.parent_col}", 
+    p.<natural_key>,
+    COUNT(c.*) AS total
+FROM {r.parent_table} p
+JOIN {r.child_table} c 
+  ON c."{r.child_col}" = p."{r.parent_col}"
+GROUP BY p."{r.parent_col}", p.<natural_key>
+ORDER BY total DESC
+LIMIT 5;"""
+        
+        queries.extend([q1, q2, q3])
+    
+    return queries
+
+# --- Run it ---
+if 'rel_df' in locals() and len(rel_df) > 0:
+    insight_queries = suggest_queries(rel_df, top_n=6)
+    
+    display(Markdown("## Suggested Insight Queries"))
+    display(Markdown("_These use your **top inferred relationships**. Replace `<natural_key>` with a readable column (e.g., `name`, `title`, `email`)._"))
+    
+    for i, q in enumerate(insight_queries, 1):
+        clean_q = textwrap.dedent(q).strip()
+        display(Markdown(f"### Query {i}"))
+        display(Code(clean_q, language='sql'))
+else:
+    display(Markdown("**No relationships found yet — run Cell 3 first!**"))
